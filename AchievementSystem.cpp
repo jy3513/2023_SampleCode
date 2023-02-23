@@ -2,11 +2,14 @@
 
 #include "AchievementSystem.h"
 
-void UAchievement::UpdateAchieve(const int32& InAchieveID, const int32& InCount, const bool InbComplete)
+//	업적의 기본 단계는 1로 정함.
+#define DEFAULT_ACHIEVEMENT_STEP 1
+
+void UAchievement::UpdateAchieve(const int32& InStep, const int32& InCount, const bool InbAllComplete)
 {
-	m_AchievementID = InAchieveID;
-	m_Count = InCount;
-	m_IsComplete = InbComplete;
+	Step = InStep;
+	Count = InCount;
+	IsAllComplete = InbAllComplete;
 }
 
 void UAchievementSystem::Initialize()
@@ -19,156 +22,169 @@ void UAchievementSystem::Start()
 
 void UAchievementSystem::Release()
 {
-	m_AchieveList.Empty();
+	AchieveList.Empty();
 }
 
-void UAchievementSystem::CheckAchieve(const EAchieveConditionType& InConditionType, const int32& InCount)
+bool UAchievementSystem::SetAchievementData(const EAchieveConditionType& InConditionType, const int32& InStep, const int32& InCount)
 {
-	if (InConditionType == EAchieveConditionType::None || InCount <= 0)
+	if (InConditionType == EAchieveConditionType::None)
 	{
-		return;
+		return false;
 	}
 
-	if (m_AchieveTable == nullptr || m_AchieveTable->IsValidLowLevel() == false)
+	if (AchieveTable == nullptr || AchieveTable->IsValidLowLevel() == false)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
-		return;
+		//	테이블이 없으면 다시 불러옴.
+		if (LoadTable() == false)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
+			return false;
+		}
 	}
 
-	if (m_AchieveGroupTable == nullptr || m_AchieveGroupTable->IsValidLowLevel() == false)
+	//	업적 테이블은 '업적타입_업적단계' 로 찾을 수 있음.
+	const FName AchievementTableID = FName(*FString::Printf(TEXT("%d_%d"), static_cast<int32>(InConditionType), InStep));
+	FAchievementData* AchievementData = AchieveTable->FindRow<FAchievementData>(AchievementTableID, TEXT("FAchievementData"));
+	if (AchievementData == nullptr || AchievementData->IsValidLowLevel() == false)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AchieveGroupTable is nullptr"));
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("AchievementData is nullptr [ index : %s ]"), *AchievementTableID.ToString());
+		return false;
 	}
 
-	//=========================================================================================================
-	TArray<FAchieveGroupData*> AchievementGroupList;
-	m_AchieveGroupTable->GetAllRows<FAchieveGroupData>(TEXT("FAchieveGroupData"), AchievementGroupList);
-
-	for (const FAchieveGroupData* AchieveGroupData : AchievementGroupList)
+	//	저장된 데이터가 없으면 새로 만듦.
+	if (AchieveList.Contains(InConditionType) == false || AchieveList[InConditionType] == nullptr || AchieveList[InConditionType]->IsValidLowLevel() == false)
 	{
-		if (AchieveGroupData == nullptr || AchieveGroupData->IsValidLowLevel() == false)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("FAchieveGroupData is nullptr"));
-			return;
-		}
-
-		FAchieveData* AchieveData = m_AchieveTable->FindRow<FAchieveData>(AchieveGroupData->start_achievment_idx, TEXT("FAchieveData"));
-		if (AchieveData == nullptr || AchieveData->IsValidLowLevel() == false)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("AchieveData is nullptr [ index : %d ]"), AchieveGroupData->start_achievment_idx);
-			return;
-		}
-
-		// 타입 확인.
-		if (InConditionType != AchieveData->condition_type)
-		{
-			continue;
-		}
-
-		UAchievement* AchieveInfo = GetAchieve(AchieveGroupID);
-		if (AchieveInfo == nullptr || AchieveInfo->IsValidLowLevel() == false)
-		{
-			SendAchieve(AchieveGroupData->start_achievment_idx, InCount);
-		}
-		else
-		{
-			SendAchieve(AchieveInfo->GetAchievementID(), InCount);
-		}
-
-		break;
+		AchieveList.Emplace(InConditionType, NewObject<UAchievement>(this));
 	}
+
+	//	업적 테이블의 next_step를 이용해 다음 단계가 있는지 확인 및 저장.
+	AchieveList[InConditionType]->UpdateAchieve(InStep, InCount, (bool)(AchievementData->next_step <= 0));
+
+	return true;
 }
 
-void UAchievementSystem::SetAchieve(const int32& InCompleteAchieveID, const int32& InGroupID, const int32& InCount)
+const UAchievement* UAchievementSystem::GetAchievementData(const EAchieveConditionType& InConditionType)
 {
-	if (m_AchieveTable == nullptr || m_AchieveTable->IsValidLowLevel() == false)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
-		return;
-	}
-
-	UAchievement* AchieveInfo = GetAchieve(InGroupID);
-	if (AchieveInfo == nullptr || AchieveInfo->IsValidLowLevel() == false)
-	{
-		AchieveInfo = NewObject<UAchievement>(this);
-		m_AchieveList.Emplace(AchieveInfo);
-	}
-	
-	if (AchieveInfo == nullptr || AchieveInfo->IsValidLowLevel() == false)
-	{
-		return;
-	}
-
-	if (InCompleteAchieveID > 0)
-	{
-		FAchieveData* AchieveData = m_AchieveTable->FindRow<FAchieveData>(InCompleteAchieveID, TEXT("FAchieveData"));
-		if (AchieveData == nullptr || AchieveData->IsValidLowLevel() == false)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("AchieveData is nullptr [ index : %d ]"), InCompleteAchieveID);
-			return;
-		}
-
-		// 다음 업적이 없음.
-		if (AchieveData->next_idx == 0)
-		{
-			AchieveInfo->UpdateAchieve(AchieveData->achievment_idx, InGroupID, InCount, true);
-		}
-		else
-		{
-			AchieveInfo->UpdateAchieve(AchieveData->next_idx, InGroupID, InCount, false);
-		}
-	}
-	else
-	{
-		AchieveInfo->UpdateAchieve(InGroupID, InGroupID, InCount, false);
-	}
-}
-
-UAchievement* UAchievementSystem::GetAchieve(const int32& InGroupID)
-{
-	if (InGroupID == 0)
+	if (InConditionType == EAchieveConditionType::None)
 	{
 		return nullptr;
 	}
 
-	UAchievement** ResultInfo = m_AchieveList.FindByPredicate([InGroupID](const UAchievement* AchieveInfo)
-		{
-			if (AchieveInfo == nullptr || AchieveInfo->IsValidLowLevel() == false)
-			{
-				return false;
-			}
-			return AchieveInfo->GetAchievementGroup() == InGroupID;
-		});
-	
-	if (ResultInfo != nullptr)
+	if (AchieveList.Contains(InConditionType) == false)
 	{
-		return *ResultInfo;
+		return nullptr;
 	}
-	
-	return nullptr;
+
+	return AchieveList[InConditionType];
 }
 
-bool UAchievementSystem::LoadTable()
+bool UAchievementSystem::UpdateAchievement(const EAchieveConditionType& InConditionType, const int32& InCount)
 {
-	m_AchieveTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Blueprint/DataTable/Achievement.Achievement"));
-	if (m_AchieveTable == nullptr || m_AchieveTable->IsValidLowLevel() == false)
+	if (InConditionType == EAchieveConditionType::None || InCount <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
 		return false;
 	}
 
-	m_AchieveGroupTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Blueprint/DataTable/AchievementGroup.AchievementGroup"));
-	if (m_AchieveGroupTable == nullptr || m_AchieveGroupTable->IsValidLowLevel() == false)
+	//=========================================================================================================
+	//	저장되어 있는 업적이 있는지 확인.
+	if (AchieveList.Contains(InConditionType))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AchieveGroupTable is nullptr"));
+		if (AchieveList[InConditionType] != nullptr && AchieveList[InConditionType]->IsValidLowLevel())
+		{
+			if (AchieveList[InConditionType]->IsAllComplete())
+			{
+				//	이미 완료 처리 되어서 더이상 업적 값을 올릴 수 없음.
+				return false;
+			}
+		}
+	}
+
+	//	완료 처리가 되지 않았으면 서버로 Req 보냄.
+	return SendAchievement_Update(InConditionType, InCount);
+}
+
+bool UAchievementSystem::PossibleCompleteAchievement(const EAchieveConditionType& InConditionType)
+{
+	if (InConditionType == EAchieveConditionType::None)
+	{
+		return false;
+	}
+
+	//	저장되어 있는 업적이 없으면 완료 처리 할 수 없음.
+	if (AchieveList.Contains(InConditionType) == false || AchieveList[InConditionType] == nullptr || AchieveList[InConditionType]->IsValidLowLevel() == false)
+	{
+		return false;
+	}
+
+	//	이미 모든 업적이 완료 처리 되어 있음.
+	if (AchieveList[InConditionType]->IsAllComplete())
+	{
+		return false;
+	}
+
+	//	테이블의 값 확인 필요.
+	if (AchieveTable == nullptr || AchieveTable->IsValidLowLevel() == false)
+	{
+		//	테이블이 없으면 다시 불러옴.
+		if (LoadTable() == false)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
+			return false;
+		}
+	}
+
+	//	업적 테이블은 '업적타입_업적단계' 로 찾을 수 있음.
+	const FName AchievementTableID = FName(*FString::Printf(TEXT("%d_%d"), static_cast<int32>(InConditionType), AchieveList[InConditionType]->GetStep()));
+	FAchievementData* AchievementData = AchieveTable->FindRow<FAchievementData>(AchievementTableID, TEXT("FAchievementData"));
+	if (AchievementData == nullptr || AchievementData->IsValidLowLevel() == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AchievementData is nullptr [ index : %s ]"), *AchievementTableID.ToString());
+		return false;
+	}
+
+	//	테이블의 값보다 큰 지 확인.
+	return (bool)(AchievementData->condition_count <= AchieveList[InConditionType]->GetCount());
+}
+
+bool UAchievementSystem::SendAchievement_Update(const EAchieveConditionType& InConditionType, const int32& InCount)
+{
+	if (InConditionType == EAchieveConditionType::None || InCount <= 0)
+	{
+		return false;
+	}
+
+	//	TODO : network send.
+
+	return false;
+}
+
+bool UAchievementSystem::SendAchievement_Complete(const EAchieveConditionType& InConditionType)
+{
+	if (PossibleCompleteAchievement(InConditionType) == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PossibleCompleteAchievement is false."));
+		return false;
+	}
+
+	//	TODO : network send.
+
+	return false;
+}
+
+//	public.
+//===============================================================================================================================================================================
+//	private.
+
+bool UAchievementSystem::LoadTable()
+{
+	AchieveTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Blueprint/DataTable/Achievement.Achievement"));
+	if (AchieveTable == nullptr || AchieveTable->IsValidLowLevel() == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AchieveTable is nullptr"));
 		return false;
 	}
 
 	return true;
 }
 
-void UAchievementSystem::SendAchieve(const int32& InAchieveID, const int32& InCount)
-{
-	//	TODO : network send.
-}
+#undef DEFAULT_ACHIEVEMENT_STEP
