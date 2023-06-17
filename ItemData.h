@@ -12,7 +12,7 @@
  */
 
 UCLASS()
-class CLIENT_R_API UItemData : public UObject
+class UItemData : public UObject
 {
 	GENERATED_BODY()
 

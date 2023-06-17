@@ -37,6 +37,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 		ERedDotConditions RedDotConditions;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+		int64 TargetIndex = 0;
+
 public:
 	FReddotNotiInfo()
 		:RedDotConditions(ERedDotConditions::None),
@@ -66,7 +69,7 @@ public:
 	* 해당 컨텐츠에 레드닷 정보가 있는지 확인.
 	* @param ERedDotConditions 레드닷 컨텐츠 타입.
 	*/
-	bool GetReddot(const ERedDotConditions& InRedDotConditions);
+	bool GetReddot(const ERedDotConditions& InRedDotConditions, const int64& InTargetIndex);
 
 	/**
 	* 해당 컨텐츠에 레드닷 정보가 있는지 확인.

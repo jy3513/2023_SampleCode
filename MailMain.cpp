@@ -179,7 +179,7 @@ bool UMail_Main::ReceiveMail(const int64& InMailUID)
 	MailItemList[InMailUID]->SetComplete(true);
 
 	//	ListView에서 보이고 있는 위젯을 갱신 해줌.
-	UMail_Item* ViewItem = Cast<UMail_Item>(ListView_MailList->GetEntryWidgetFromItem(MailItemList[InMailUID]));
+	UMail_Item* ViewItem = Cast<UMail_ListItem>(ListView_MailList->GetEntryWidgetFromItem(MailItemList[InMailUID]));
 	if (ViewItem != nullptr && ViewItem->IsValidLowLevel() == true)
 	{
 		// view item이 없을 수 있음. 에러 아님.

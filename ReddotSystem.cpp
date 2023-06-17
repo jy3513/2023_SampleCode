@@ -22,7 +22,7 @@ void UReddotSystem::Release()
 // public - Content Reddot.
 
 #pragma region Get_Reddot
-bool UReddotSystem::GetReddot(const ERedDotConditions& InRedDotConditions)
+bool UReddotSystem::GetReddot(const ERedDotConditions& InRedDotConditions, const int64& InTargetIndex)
 {
     if (ERedDotConditions::None == InRedDotConditions)
     {
@@ -38,7 +38,18 @@ bool UReddotSystem::GetReddot(const ERedDotConditions& InRedDotConditions)
 
     // get data.
     TArray<int64> ReddotList;
-    return GetReddotInfo(InContentEnum, ReddotList);
+    GetReddotInfo(InRedDotConditions, ReddotList);
+    if (InTargetIndex <= 0)
+    {
+        //   InTargetIndex이 0과 동일하거나 그 아래라면 InRedDotConditions만 확인.
+        return (bool)(ReddotList.Num() > 0);
+    }
+    else
+    {
+        return (bool)(ReddotList.Contains(InTargetIndex));
+    }
+
+    return false;
 }
 
 bool UReddotSystem::GetReddotInfo(const ERedDotConditions& InContentEnum, TArray<int64>& OutReddotList)

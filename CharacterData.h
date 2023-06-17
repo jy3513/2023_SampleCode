@@ -15,7 +15,7 @@ enum class EAttributeType : uint8;
 enum class ESkillType : uint8;
 
 UCLASS()
-class CLIENT_R_API UCharacterData : public UObject
+class UCharacterData : public UObject
 {
 	GENERATED_BODY()
 
