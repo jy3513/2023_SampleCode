@@ -50,6 +50,17 @@ public:
 	{};
 };
 
+UCLASS()
+class UReddotSystemData : public USaveGame
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+		TArray<FReddotNotiInfo> ContentReddotList;
+
+};
+
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnContentReddotEvent, const ERedDotConditions&);
 
 UCLASS()
